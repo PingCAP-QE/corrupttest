@@ -1,7 +1,7 @@
 use crate::error::StringError;
 use reqwest;
 
-const STATUS_ADDRESS: &'static str = "127.0.0.1:10080";
+const STATUS_ADDRESS: &str = "127.0.0.1:10080";
 
 pub fn enable_failpoint(
     name: impl Into<String>,

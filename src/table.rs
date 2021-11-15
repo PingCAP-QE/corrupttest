@@ -33,6 +33,37 @@ enum ColumnType {
     String(Collation),
 }
 
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+enum Datum {
+    Int(i64),
+    String(String),
+}
+
+impl Datum {
+    fn new(column_type: &ColumnType) -> Self {
+        match column_type {
+            ColumnType::Int => Datum::Int(10),
+            ColumnType::String(_) => Datum::String("hello".to_owned()),
+        }
+    }
+
+    fn next(self) -> Self {
+        match self {
+            Datum::Int(x) => Datum::Int(x + 1),
+            Datum::String(x) => Datum::String(format!("{} x", x)),
+        }
+    }
+}
+
+impl ToString for Datum {
+    fn to_string(&self) -> String {
+        match self {
+            Datum::Int(x) => x.to_string(),
+            Datum::String(x) => x.to_string(),
+        }
+    }
+}
+
 impl Next for ColumnType {
     fn new() -> Self {
         ColumnType::Int
@@ -56,15 +87,6 @@ fn rand_name(prefix: &str) -> String {
 struct Column {
     name: String,
     column_type: ColumnType,
-}
-
-impl Column {
-    fn gen_datum(&self) -> String {
-        match self.column_type {
-            ColumnType::Int => "10".to_owned(),
-            ColumnType::String(_) => "1234567890".to_owned(),
-        }
-    }
 }
 
 impl Next for Column {
@@ -243,6 +265,41 @@ impl Next for Table {
     }
 }
 
+pub struct Row {
+    cols: Vec<Datum>,
+}
+
+impl Row {
+    fn new(cols: &[Column]) -> Self {
+        Row {
+            cols: cols.iter().map(|c| Datum::new(&c.column_type)).collect(),
+        }
+    }
+
+    pub fn next(self) -> Self {
+        Row {
+            cols: self
+                .cols
+                .into_iter()
+                .map(|c| c.next())
+                .collect::<Vec<Datum>>(),
+        }
+    }
+}
+
+impl ToString for Row {
+    fn to_string(&self) -> String {
+        self.cols
+            .iter()
+            .map(|c| match c {
+                Datum::Int(i) => i.to_string(),
+                Datum::String(s) => format!("\'{}\'", s),
+            })
+            .collect::<Vec<String>>()
+            .join(",")
+    }
+}
+
 impl Table {
     pub fn create_sentence(&self) -> String {
         let mut sentence = String::new();
@@ -254,14 +311,14 @@ impl Table {
                 sentence.push_str(", ");
             }
             sentence.push_str(&col.name);
-            sentence.push_str(" ");
+            sentence.push(' ');
             match &col.column_type {
                 ColumnType::Int => sentence.push_str("INT"),
                 ColumnType::String(collation) => {
                     sentence.push_str("VARCHAR(10)");
                     if let Some(collation) = collation {
                         sentence.push_str(" COLLATE ");
-                        sentence.push_str(&collation);
+                        sentence.push_str(collation);
                     }
                 }
             }
@@ -282,17 +339,17 @@ impl Table {
                 }
                 sentence.push_str(&col.name);
                 if let Some(length) = col.length {
-                    sentence.push_str("(");
+                    sentence.push('(');
                     sentence.push_str(&length.to_string());
-                    sentence.push_str(")");
+                    sentence.push(')');
                 }
             }
-            sentence.push_str(")");
+            sentence.push(')');
             if matches!(&index.unique, Uniqueness::ClusterdPrimary) {
                 sentence.push_str(" CLUSTERED");
             }
         }
-        sentence.push_str(")");
+        sentence.push(')');
         sentence
     }
 
@@ -300,12 +357,8 @@ impl Table {
         format!("DROP TABLE IF EXISTS {}", &self.name)
     }
 
-    pub fn gen_row(&self) -> Vec<String> {
-        let mut row = Vec::new();
-        for col in &self.cols {
-            row.push(col.gen_datum());
-        }
-        row
+    pub fn new_row(&self) -> Row {
+        Row::new(&self.cols)
     }
 
     // manual setting
@@ -380,4 +433,14 @@ impl Iterator for TableIterator {
         self.table = self.table.clone().and_then(Next::next);
         self.table.clone()
     }
+}
+
+#[test]
+fn test_gen_row() {
+    let mut table = Table::new();
+    while !matches!(table.cols[1].column_type, ColumnType::String(_)) {
+        table = table.next().unwrap();
+    }
+    let row = table.new_row();
+    println!("{}", row.to_string());
 }
