@@ -301,59 +301,59 @@ impl ToString for Row {
 }
 
 impl Table {
-    pub fn create_sentence(&self) -> String {
-        let mut sentence = String::new();
-        sentence.push_str("CREATE TABLE ");
-        sentence.push_str(&self.name);
-        sentence.push_str(" (");
+    pub fn create_statement(&self) -> String {
+        let mut statement = String::new();
+        statement.push_str("CREATE TABLE ");
+        statement.push_str(&self.name);
+        statement.push_str(" (");
         for (i, col) in self.cols.iter().enumerate() {
             if i > 0 {
-                sentence.push_str(", ");
+                statement.push_str(", ");
             }
-            sentence.push_str(&col.name);
-            sentence.push(' ');
+            statement.push_str(&col.name);
+            statement.push(' ');
             match &col.column_type {
-                ColumnType::Int => sentence.push_str("INT"),
+                ColumnType::Int => statement.push_str("INT"),
                 ColumnType::String(collation) => {
-                    sentence.push_str("VARCHAR(10)");
+                    statement.push_str("VARCHAR(10)");
                     if let Some(collation) = collation {
-                        sentence.push_str(" COLLATE ");
-                        sentence.push_str(collation);
+                        statement.push_str(" COLLATE ");
+                        statement.push_str(collation);
                     }
                 }
             }
         }
         for index in &self.indices {
-            sentence.push_str(", ");
+            statement.push_str(", ");
             match index.unique {
                 Uniqueness::NonUnique => {}
-                Uniqueness::Unique => sentence.push_str("UNIQUE "),
-                _ => sentence.push_str("PRIMARY "),
+                Uniqueness::Unique => statement.push_str("UNIQUE "),
+                _ => statement.push_str("PRIMARY "),
             }
-            sentence.push_str("KEY ");
-            sentence.push_str(&index.name);
-            sentence.push_str(" (");
+            statement.push_str("KEY ");
+            statement.push_str(&index.name);
+            statement.push_str(" (");
             for (j, col) in index.columns.iter().enumerate() {
                 if j > 0 {
-                    sentence.push_str(", ");
+                    statement.push_str(", ");
                 }
-                sentence.push_str(&col.name);
+                statement.push_str(&col.name);
                 if let Some(length) = col.length {
-                    sentence.push('(');
-                    sentence.push_str(&length.to_string());
-                    sentence.push(')');
+                    statement.push('(');
+                    statement.push_str(&length.to_string());
+                    statement.push(')');
                 }
             }
-            sentence.push(')');
+            statement.push(')');
             if matches!(&index.unique, Uniqueness::ClusterdPrimary) {
-                sentence.push_str(" CLUSTERED");
+                statement.push_str(" CLUSTERED");
             }
         }
-        sentence.push(')');
-        sentence
+        statement.push(')');
+        statement
     }
 
-    pub fn drop_sentence(&self) -> String {
+    pub fn drop_statement(&self) -> String {
         format!("DROP TABLE IF EXISTS {}", &self.name)
     }
 
