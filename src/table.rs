@@ -2,7 +2,6 @@ use async_stream::stream;
 use futures_core::stream::Stream;
 use futures_util::pin_mut;
 use futures_util::stream::StreamExt;
-use std::sync::atomic::{AtomicU32, Ordering};
 
 struct Collation;
 impl Collation {
@@ -58,10 +57,6 @@ impl ToString for Datum {
 }
 
 impl ColumnType {
-    fn new() -> Self {
-        ColumnType::Int
-    }
-
     fn stream() -> impl Stream<Item = ColumnType> {
         stream! {
             yield ColumnType::Int;
@@ -70,22 +65,8 @@ impl ColumnType {
             while let Some(c) = collation_stream.next().await {
                 yield ColumnType::String(c);
             }
-            // let mut column_type = ColumnType::new();
-            // loop {
-            //     yield column_type.clone();
-            //     column_type = match column_type {
-            //         ColumnType::Int => Some(ColumnType::String(Collation::new())),
-            //         ColumnType::String(collation) => Some(ColumnType::String(collation.next()?)),
-            //     }
-            // }
         }
     }
-}
-
-static NAME_COUNTER: AtomicU32 = AtomicU32::new(0);
-
-fn rand_name(prefix: &str) -> String {
-    format!("{}{}", prefix, NAME_COUNTER.fetch_add(1, Ordering::SeqCst))
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
@@ -95,23 +76,9 @@ struct Column {
 }
 
 impl Column {
-    // fn new() -> Self {
-    //     Column {
-    //         name: rand_name("c"),
-    //         column_type: ColumnType::Int,
-    //     }
-    // }
-
-    // fn next(self) -> Option<Self> {
-    //     Some(Column {
-    //         name: self.name,
-    //         column_type: self.column_type.next()?,
-    //     })
-    // }
-
-    fn stream() -> impl Stream<Item = Column> {
+    fn stream(name: String) -> impl Stream<Item = Column> {
         stream! {
-            let name = rand_name("c");
+            // let name = rand_name("c");
             let column_type_stream = ColumnType::stream();
             pin_mut!(column_type_stream);
             while let Some(column_type) = column_type_stream.next().await {
@@ -131,28 +98,10 @@ struct IndexColumn {
 }
 
 impl IndexColumn {
-    // fn new() -> Self {
-    //     IndexColumn {
-    //         // manually set
-    //         name: "unexpected".to_owned(),
-    //         length: None,
-    //     }
-    // }
-
-    // fn next(self) -> Option<Self> {
-    //     match self.length {
-    //         None => Some(IndexColumn {
-    //             name: self.name,
-    //             length: Some(3),
-    //         }),
-    //         Some(_) => None,
-    //     }
-    // }
-
     fn stream(col_names: Vec<String>) -> impl Stream<Item = IndexColumn> {
         stream! {
             for name in col_names {
-                for length in vec![None, Some(3)] {
+                for length in [None, Some(3)] {
                     yield IndexColumn {
                         name: name.clone(),
                         length: length.clone(),
@@ -176,19 +125,6 @@ impl Uniqueness {
         matches!(self, Self::ClusterdPrimary | Self::NonClusteredPrimary)
     }
 
-    // fn new() -> Self {
-    //     Uniqueness::NonUnique
-    // }
-
-    // fn next(self) -> Option<Self> {
-    //     match self {
-    //         Uniqueness::NonUnique => Some(Uniqueness::Unique),
-    //         Uniqueness::Unique => Some(Uniqueness::ClusterdPrimary),
-    //         Uniqueness::ClusterdPrimary => Some(Uniqueness::NonClusteredPrimary),
-    //         Uniqueness::NonClusteredPrimary => None,
-    //     }
-    // }
-
     fn stream() -> impl Stream<Item = Uniqueness> {
         stream! {
             yield Uniqueness::NonUnique;
@@ -207,35 +143,9 @@ struct Index {
 }
 
 impl Index {
-    // fn new() -> Self {
-    //     Index {
-    //         name: rand_name("i"),
-    //         // manually set
-    //         columns: vec![IndexColumn::new(), IndexColumn::new()],
-    //         unique: Uniqueness::new(),
-    //     }
-    // }
-
-    // fn next(self) -> Option<Self> {
-    //     let new_columns = self.columns.clone().next();
-    //     match (new_columns, self.unique.next()) {
-    //         (Some(new_columns), _) => Some(Index {
-    //             name: self.name,
-    //             columns: new_columns,
-    //             unique: self.unique,
-    //         }),
-    //         (None, Some(unique)) => Some(Index {
-    //             name: self.name,
-    //             columns: Next::new(),
-    //             unique,
-    //         }),
-    //         (None, None) => None,
-    //     }
-    // }
-
-    fn stream(col_names: Vec<String>) -> impl Stream<Item = Index> {
+    fn stream(name: String, col_names: Vec<String>) -> impl Stream<Item = Index> {
         stream! {
-            let name = rand_name("i");
+            // let name = rand_name("i");
             let c1_stream = IndexColumn::stream(col_names.clone());
             pin_mut!(c1_stream);
 
@@ -266,77 +176,6 @@ pub struct Table {
     indices: Vec<Index>,
 }
 
-impl Table {
-    // fn new() -> Self {
-    //     let mut t = Table {
-    //         name: rand_name("t"),
-    //         cols: vec![Column::new(), Column::new()],
-    //         indices: vec![Index::new(), Index::new()],
-    //     };
-    //     t.set_index_column_names();
-    //     t
-    // }
-
-    // gives an valid Table
-    // fn next(mut self) -> Option<Self> {
-    // We need to make some modifications to satisfy constraints, e.g.
-    // there can be at most 1 primary index, and columns in indices must exist
-
-    // loop {
-    //     match self.indices.next() {
-    //         Some(x) => {
-    //             self.name = rand_name("t");
-    //             self.indices = x;
-    //             self.set_index_column_names();
-    //         }
-    //         None => match self.cols.next() {
-    //             Some(x) => {
-    //                 self.name = rand_name("t");
-    //                 self.indices = <Vec<Index> as Next>::new();
-    //                 self.cols = x;
-    //                 self.set_index_column_names();
-    //             }
-    //             None => return None,
-    //         },
-    //     };
-    //     if self.constraint_satisfied() {
-    //         return Some(self);
-    //     }
-    // }
-    // }
-
-    fn stream() -> impl Stream<Item = Table> {
-        stream! {
-            let name = rand_name("t");
-            let c1_stream = Column::stream();
-            pin_mut!(c1_stream);
-
-            while let Some(c1) = c1_stream.next().await {
-                let c2_stream = Column::stream();
-                pin_mut!(c2_stream);
-
-                while let Some(c2) = c2_stream.next().await {
-                    let i1 = Index::stream(vec![c1.name.clone(), c2.name.clone()]);
-                    pin_mut!(i1);
-        
-                    while let Some(i1) = i1.next().await {
-                        let i2 = Index::stream(vec![c1.name.clone(), c2.name.clone()]);
-                        pin_mut!(i2);
-
-                        while let Some(i2) = i2.next().await {
-                            yield Table {
-                                name: name.clone(),
-                                cols: vec![c1.clone(), c2.clone()],
-                                indices: vec![i1.clone(), i2.clone()],
-                            };
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 pub struct Row {
     cols: Vec<Datum>,
 }
@@ -348,6 +187,7 @@ impl Row {
         }
     }
 
+    #[must_use]
     pub fn next(self) -> Self {
         Row {
             cols: self
@@ -433,14 +273,6 @@ impl Table {
         Row::new(&self.cols)
     }
 
-    // manual setting
-    fn set_index_column_names(&mut self) {
-        self.indices[0].columns[0].name = self.cols[0].name.clone();
-        self.indices[0].columns[1].name = self.cols[1].name.clone();
-        self.indices[1].columns[0].name = self.cols[1].name.clone();
-        self.indices[1].columns[1].name = self.cols[0].name.clone();
-    }
-
     fn constraint_satisfied(&self) -> bool {
         let mut satisfied = true;
 
@@ -484,10 +316,58 @@ impl Table {
 
         satisfied
     }
-}
 
-pub struct TableIterator {
-    pub table: Option<Table>,
+    // provides some *manually constructed* conditions to reduce the number of possible tables
+    fn optimized(&self) -> bool {
+        if self.indices[0].columns[0].name != "c1" {
+            return false;
+        }
+        if self.indices[0].columns[1].name != "c2" {
+            return false;
+        }
+        if self.indices[1].columns[0].name != "c2" {
+            return false;
+        }
+        if self.indices[1].columns[1].name != "c1" {
+            return false;
+        }
+        true
+    }
+
+    pub fn stream() -> impl Stream<Item = Table> {
+        stream! {
+            let mut table_count = 0;
+            let c1_stream = Column::stream("c1".to_owned());
+            pin_mut!(c1_stream);
+
+            while let Some(c1) = c1_stream.next().await {
+                let c2_stream = Column::stream("c2".to_owned());
+                pin_mut!(c2_stream);
+
+                while let Some(c2) = c2_stream.next().await {
+                    let i1 = Index::stream("i1".to_owned(), vec![c1.name.clone(), c2.name.clone()]);
+                    pin_mut!(i1);
+
+                    while let Some(i1) = i1.next().await {
+                        let i2 = Index::stream("i2".to_owned(), vec![c1.name.clone(), c2.name.clone()]);
+                        pin_mut!(i2);
+
+                        while let Some(i2) = i2.next().await {
+                            let t = Table {
+                                name: format!("t{}", table_count),
+                                cols: vec![c1.clone(), c2.clone()],
+                                indices: vec![i1.clone(), i2.clone()],
+                            };
+                            if t.constraint_satisfied() && t.optimized(){
+                                yield t;
+                                table_count += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[tokio::test]
