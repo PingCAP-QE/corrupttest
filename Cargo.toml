@@ -9,5 +9,8 @@ edition = "2021"
 mysql = "21"
 reqwest = { version = "0.11", features = ["blocking"] }
 tokio = {version = "1", features = ["full"]}
+async-stream = "0.3"
+futures-core = "0.3"
+futures-util = "0.3"
 futures = "0.3"
 clap = "2"
