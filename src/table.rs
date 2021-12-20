@@ -25,6 +25,18 @@ enum ColumnType {
     String(Option<String>), // collation
 }
 
+impl ToString for ColumnType {
+    fn to_string(&self) -> String {
+        match self {
+            ColumnType::Int => "INT".to_owned(),
+            ColumnType::String(Some(c)) => {
+                format!("VARCHAR(10) COLLATE {}", c)
+            }
+            ColumnType::String(None) => "VARCHAR(10)".to_owned(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 enum Datum {
     Int(i64),
@@ -78,7 +90,6 @@ struct Column {
 impl Column {
     fn stream(name: String) -> impl Stream<Item = Column> {
         stream! {
-            // let name = rand_name("c");
             let column_type_stream = ColumnType::stream();
             pin_mut!(column_type_stream);
             while let Some(column_type) = column_type_stream.next().await {
@@ -145,7 +156,6 @@ struct Index {
 impl Index {
     fn stream(name: String, col_names: Vec<String>) -> impl Stream<Item = Index> {
         stream! {
-            // let name = rand_name("i");
             let c1_stream = IndexColumn::stream(col_names.clone());
             pin_mut!(c1_stream);
 
@@ -214,55 +224,44 @@ impl ToString for Row {
 
 impl Table {
     pub fn create_statement(&self) -> String {
-        let mut statement = String::new();
-        statement.push_str("CREATE TABLE ");
-        statement.push_str(&self.name);
-        statement.push_str(" (");
-        for (i, col) in self.cols.iter().enumerate() {
-            if i > 0 {
-                statement.push_str(", ");
-            }
-            statement.push_str(&col.name);
-            statement.push(' ');
-            match &col.column_type {
-                ColumnType::Int => statement.push_str("INT"),
-                ColumnType::String(collation) => {
-                    statement.push_str("VARCHAR(10)");
-                    if let Some(collation) = collation {
-                        statement.push_str(" COLLATE ");
-                        statement.push_str(collation);
-                    }
+        let col_clauses = self
+            .cols
+            .iter()
+            .map(|c| format!("{} {}", c.name, c.column_type.to_string()));
+        let index_clauses = self.indices.iter().map(|i| {
+            format!(
+                "{} KEY {} ({}){}",
+                match i.unique {
+                    Uniqueness::NonUnique => "",
+                    Uniqueness::Unique => "UNIQUE",
+                    _ => "PRIMARY",
+                },
+                i.name,
+                i.columns
+                    .iter()
+                    .map(|c| format!(
+                        "{}{}",
+                        c.name,
+                        c.length
+                            .map(|l| format!("({})", l))
+                            .unwrap_or_else(|| "".to_owned())
+                    ))
+                    .collect::<Vec<String>>()
+                    .join(", "),
+                match i.unique {
+                    Uniqueness::ClusterdPrimary => " CLUSTERED",
+                    _ => "",
                 }
-            }
-        }
-        for index in &self.indices {
-            statement.push_str(", ");
-            match index.unique {
-                Uniqueness::NonUnique => {}
-                Uniqueness::Unique => statement.push_str("UNIQUE "),
-                _ => statement.push_str("PRIMARY "),
-            }
-            statement.push_str("KEY ");
-            statement.push_str(&index.name);
-            statement.push_str(" (");
-            for (j, col) in index.columns.iter().enumerate() {
-                if j > 0 {
-                    statement.push_str(", ");
-                }
-                statement.push_str(&col.name);
-                if let Some(length) = col.length {
-                    statement.push('(');
-                    statement.push_str(&length.to_string());
-                    statement.push(')');
-                }
-            }
-            statement.push(')');
-            if matches!(&index.unique, Uniqueness::ClusterdPrimary) {
-                statement.push_str(" CLUSTERED");
-            }
-        }
-        statement.push(')');
-        statement
+            )
+        });
+        format!(
+            "CREATE TABLE {} ({})",
+            self.name,
+            col_clauses
+                .chain(index_clauses)
+                .collect::<Vec<String>>()
+                .join(", ")
+        )
     }
 
     pub fn drop_statement(&self) -> String {

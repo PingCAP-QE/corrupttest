@@ -82,9 +82,9 @@ impl Workload for SingleInsertion {
         enable_featuers(conn, config)?;
         let drop_statement = table.drop_statement();
         let create_statement = table.create_statement();
+        println!("{}", create_statement);
         conn.query_drop(&drop_statement)?;
         conn.query_drop(&create_statement)?;
-        println!("{}", create_statement);
 
         for injection in AVAILABLE_INJECTIONS {
             enable_failpoint(
