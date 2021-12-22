@@ -2,7 +2,6 @@ use async_stream::stream;
 use futures_core::stream::Stream;
 use futures_util::pin_mut;
 use futures_util::stream::StreamExt;
-
 struct Collation;
 impl Collation {
     fn stream() -> impl Stream<Item = Option<String>> {
@@ -38,7 +37,7 @@ impl ToString for ColumnType {
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-enum Datum {
+pub enum Datum {
     Int(i64),
     String(String),
 }
@@ -51,7 +50,8 @@ impl Datum {
         }
     }
 
-    fn next(self) -> Self {
+    #[must_use]
+    pub fn next(&self) -> Self {
         match self {
             Datum::Int(x) => Datum::Int(x + 1),
             Datum::String(x) => Datum::String(format!("{} x", x)),
@@ -63,7 +63,7 @@ impl ToString for Datum {
     fn to_string(&self) -> String {
         match self {
             Datum::Int(x) => x.to_string(),
-            Datum::String(x) => x.to_string(),
+            Datum::String(x) => format!("'{}'", x),
         }
     }
 }
@@ -82,8 +82,8 @@ impl ColumnType {
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-struct Column {
-    name: String,
+pub struct Column {
+    pub name: String,
     column_type: ColumnType,
 }
 
@@ -109,14 +109,24 @@ struct IndexColumn {
 }
 
 impl IndexColumn {
-    fn stream(col_names: Vec<String>) -> impl Stream<Item = IndexColumn> {
+    fn stream(cols: Vec<Column>) -> impl Stream<Item = IndexColumn> {
         stream! {
-            for name in col_names {
-                for length in [None, Some(3)] {
-                    yield IndexColumn {
-                        name: name.clone(),
-                        length: length.clone(),
-                    };
+            for col in cols {
+                match col.column_type {
+                    ColumnType::Int => yield IndexColumn {
+                        name: col.name.clone(),
+                        length: None,
+                    },
+                    ColumnType::String(_) => {
+                        yield IndexColumn {
+                            name: col.name.clone(),
+                            length: Some(10),
+                        };
+                        yield IndexColumn {
+                            name: col.name.clone(),
+                            length: Some(10),
+                        };
+                    }
                 }
             }
         }
@@ -154,13 +164,13 @@ struct Index {
 }
 
 impl Index {
-    fn stream(name: String, col_names: Vec<String>) -> impl Stream<Item = Index> {
+    fn stream(name: String, col: Vec<Column>) -> impl Stream<Item = Index> {
         stream! {
-            let c1_stream = IndexColumn::stream(col_names.clone());
+            let c1_stream = IndexColumn::stream(col.clone());
             pin_mut!(c1_stream);
 
             while let Some(c1) = c1_stream.next().await {
-                let c2_stream = IndexColumn::stream(col_names.clone());
+                let c2_stream = IndexColumn::stream(col.clone());
                 pin_mut!(c2_stream);
 
                 while let Some(c2) = c2_stream.next().await {
@@ -182,12 +192,12 @@ impl Index {
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct Table {
     pub name: String,
-    cols: Vec<Column>,
+    pub cols: Vec<Column>,
     indices: Vec<Index>,
 }
 
 pub struct Row {
-    cols: Vec<Datum>,
+    pub cols: Vec<Datum>,
 }
 
 impl Row {
@@ -213,10 +223,7 @@ impl ToString for Row {
     fn to_string(&self) -> String {
         self.cols
             .iter()
-            .map(|c| match c {
-                Datum::Int(i) => i.to_string(),
-                Datum::String(s) => format!("\'{}\'", s),
-            })
+            .map(ToString::to_string)
             .collect::<Vec<String>>()
             .join(",")
     }
@@ -297,22 +304,6 @@ impl Table {
             unreachable!();
         }
 
-        // prefix index is only for string type
-        if self.indices.iter().any(|x| {
-            x.columns.iter().any(|y| {
-                !matches!(
-                    self.cols
-                        .iter()
-                        .find(|z| z.name == y.name)
-                        .unwrap()
-                        .column_type,
-                    ColumnType::String(_)
-                )
-            })
-        }) {
-            satisfied = false;
-        }
-
         satisfied
     }
 
@@ -344,11 +335,11 @@ impl Table {
                 pin_mut!(c2_stream);
 
                 while let Some(c2) = c2_stream.next().await {
-                    let i1 = Index::stream("i1".to_owned(), vec![c1.name.clone(), c2.name.clone()]);
+                    let i1 = Index::stream("i1".to_owned(), vec![c1.clone(), c2.clone()]);
                     pin_mut!(i1);
 
                     while let Some(i1) = i1.next().await {
-                        let i2 = Index::stream("i2".to_owned(), vec![c1.name.clone(), c2.name.clone()]);
+                        let i2 = Index::stream("i2".to_owned(), vec![c1.clone(), c2.clone()]);
                         pin_mut!(i2);
 
                         while let Some(i2) = i2.next().await {
@@ -357,7 +348,7 @@ impl Table {
                                 cols: vec![c1.clone(), c2.clone()],
                                 indices: vec![i1.clone(), i2.clone()],
                             };
-                            if t.constraint_satisfied() && t.optimized(){
+                            if t.constraint_satisfied() && t.optimized() {
                                 yield t;
                                 table_count += 1;
                             }
@@ -369,16 +360,26 @@ impl Table {
     }
 }
 
-#[tokio::test]
-async fn generate_table() {
-    let table_stream = Table::stream();
-    pin_mut!(table_stream);
-    let mut cnt = 0;
-    while let Some(t) = table_stream.next().await {
-        if t.constraint_satisfied() {
-            println!("{}", t.create_statement());
+#[cfg(test)]
+mod test {
+    use crate::table::Table;
+    use futures::{pin_mut, StreamExt};
+    use slog::*;
+
+    #[tokio::test]
+    async fn generate_table() {
+        let decorator = slog_term::TermDecorator::new().build();
+        let drain = slog_term::FullFormat::new(decorator).build().fuse();
+        let drain = slog_async::Async::new(drain).build().fuse();
+        let log = slog::Logger::root(drain, o!());
+
+        let table_stream = Table::stream();
+        pin_mut!(table_stream);
+        let mut cnt = 0;
+        while let Some(t) = table_stream.next().await {
+            info!(log, "{}", t.create_statement());
             cnt += 1;
         }
+        info!(log, "{}", cnt);
     }
-    println!("{}", cnt);
 }
