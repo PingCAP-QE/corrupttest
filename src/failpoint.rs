@@ -38,7 +38,7 @@ pub async fn disable_failpoint(client: &reqwest::Client, name: impl Into<String>
         .await?;
     let duration = start.elapsed();
     FAILPOINT_DURATION_MS.fetch_add(duration.as_millis() as u64, Ordering::SeqCst);
-    if res.contains("fail") {
+    if res.contains("fail") && !res.contains("failpoint is disabled") {
         return Err(MyError::StringError(res));
     }
     Ok(())

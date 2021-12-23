@@ -56,9 +56,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn init_pool(
-    log: &Logger,
-) -> Result<(reqwest::Client, Arc<sqlx::Pool<sqlx::MySql>>)> {
+async fn init_pool(log: &Logger) -> Result<(reqwest::Client, Arc<sqlx::Pool<sqlx::MySql>>)> {
     let client = reqwest::Client::new();
     let url = format!("mysql://root@{}/test", MYSQL_ADDRESS);
     info!(log, "using tidb {}", &url);

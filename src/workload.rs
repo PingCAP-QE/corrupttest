@@ -90,6 +90,8 @@ pub fn find_workload(name: &str) -> Box<dyn Workload> {
         "single" => Box::new(SingleInsertion),
         "double" => Box::new(DoubleInsertion),
         "t2" => Box::new(T2),
+        "t3" => Box::new(T3),
+        "t4" => Box::new(T4),
         _ => unimplemented!(),
     }
 }
@@ -207,7 +209,7 @@ impl Workload for DoubleInsertion {
     }
 }
 
-// 2 txns. The first writes corrupted data and the second reads it. Check if Assertion can detect it.
+// 2 txns. The first writes corrupted data and the second updates it. Check if Assertion can detect it.
 struct T2;
 #[async_trait]
 impl Workload for T2 {
@@ -244,12 +246,6 @@ impl Workload for T2 {
             send!(conn, "begin optimistic")?;
             let row = table.new_row();
             let insertion = format!("INSERT INTO {} VALUES ({})", table.name, row.to_string());
-            let deletion = format!(
-                "DELETE FROM {} WHERE {} = {}",
-                table.name,
-                table.cols[0].name,
-                row.cols[0].to_string()
-            );
             let update = format!(
                 "UPDATE {} SET {} = {} WHERE {} = {}",
                 table.name,
@@ -263,7 +259,6 @@ impl Workload for T2 {
                 send!(conn, query(insertion.as_str()))?;
                 send!(conn, "commit")?;
                 send!(conn, "begin optimistic")?;
-                send!(conn, query(deletion.as_str()))?;
                 send!(conn, query(update.as_str()))?;
                 send!(conn, "commit")?;
                 Ok(())
@@ -275,6 +270,160 @@ impl Workload for T2 {
             }
             info!(log, "workload finished"; "result" => ?res);
 
+            collect_result(res, results, &table, injection, pool.clone()).await;
+            disable_failpoint(
+                client,
+                "github.com/pingcap/tidb/table/tables/corruptMutations",
+            )
+            .await?;
+        }
+
+        Ok(())
+    }
+}
+
+// similar to T2, but add a deletion after the update.
+struct T3;
+#[async_trait]
+impl Workload for T3 {
+    async fn execute(
+        &self,
+        log: Logger,
+        config: &Config,
+        table: Table,
+        client: &reqwest::Client,
+        pool: Arc<Pool<MySql>>,
+        results: &mut HashMap<(Table, String, String), Effectiveness>,
+    ) -> Result<()> {
+        let mut conn = pool.acquire().await?;
+        enable_featuers(&mut conn, config).await?;
+        let drop_statement = table.drop_statement();
+        let create_statement = table.create_statement();
+        let start = Instant::now();
+        send!(conn, query(drop_statement.as_str())).expect("don't let drop statement fail");
+        send!(conn, query(create_statement.as_str())).expect("don't let create statement fail");
+        let duration = start.elapsed();
+        CREATE_TABLE_DURAION_MS.fetch_add(duration.as_millis() as u64, Ordering::SeqCst);
+        info!(log, "{}", create_statement);
+
+        for injection in AVAILABLE_INJECTIONS {
+            info!(log, "{} ready to go!", injection);
+
+            // NOTE: "1*" here, otherwise an index mutation is missing for each row insertion, thus cannot be detected.
+            enable_failpoint(
+                client,
+                "github.com/pingcap/tidb/table/tables/corruptMutations",
+                format!("1*return(\"{}\")", injection),
+            )
+            .await?;
+            send!(conn, "begin optimistic")?;
+            let row = table.new_row();
+            let insertion = format!("INSERT INTO {} VALUES ({})", table.name, row.to_string());
+            let update = format!(
+                "UPDATE {} SET {} = {} WHERE {} = {}",
+                table.name,
+                table.cols[0].name,
+                row.cols[0].next().to_string(),
+                table.cols[1].name,
+                row.cols[1].to_string()
+            );
+            let deletion = format!(
+                "DELETE FROM {} WHERE {} = {}",
+                table.name,
+                table.cols[0].name,
+                row.cols[0].to_string()
+            );
+
+            let res = async {
+                send!(conn, query(insertion.as_str()))?;
+                send!(conn, "commit")?;
+                send!(conn, "begin optimistic")?;
+                send!(conn, query(update.as_str()))?;
+                send!(conn, query(deletion.as_str()))?;
+                send!(conn, "commit")?;
+                Ok(())
+            }
+            .await;
+
+            if res.is_err() {
+                send!(conn, "rollback")?;
+            }
+            info!(log, "workload finished"; "result" => ?res);
+
+            collect_result(res, results, &table, injection, pool.clone()).await;
+            disable_failpoint(
+                client,
+                "github.com/pingcap/tidb/table/tables/corruptMutations",
+            )
+            .await?;
+        }
+
+        Ok(())
+    }
+}
+
+// similar to T2, but inject error in the update, instead of in the insertion.
+struct T4;
+#[async_trait]
+impl Workload for T4 {
+    async fn execute(
+        &self,
+        log: Logger,
+        config: &Config,
+        table: Table,
+        client: &reqwest::Client,
+        pool: Arc<Pool<MySql>>,
+        results: &mut HashMap<(Table, String, String), Effectiveness>,
+    ) -> Result<()> {
+        let mut conn = pool.acquire().await?;
+        enable_featuers(&mut conn, config).await?;
+        let drop_statement = table.drop_statement();
+        let create_statement = table.create_statement();
+        let start = Instant::now();
+        send!(conn, query(drop_statement.as_str())).expect("don't let drop statement fail");
+        send!(conn, query(create_statement.as_str())).expect("don't let create statement fail");
+        let duration = start.elapsed();
+        CREATE_TABLE_DURAION_MS.fetch_add(duration.as_millis() as u64, Ordering::SeqCst);
+        info!(log, "{}", create_statement);
+
+        for injection in AVAILABLE_INJECTIONS {
+            info!(log, "{} ready to go!", injection);
+
+            // NOTE: "1*" here, otherwise an index mutation is missing for each row insertion, thus cannot be detected.
+            send!(conn, "begin optimistic")?;
+            let row = table.new_row();
+            let insertion = format!("INSERT INTO {} VALUES ({})", table.name, row.to_string());
+            let update = format!(
+                "UPDATE {} SET {} = {} WHERE {} = {}",
+                table.name,
+                table.cols[0].name,
+                row.cols[0].next().to_string(),
+                table.cols[1].name,
+                row.cols[1].to_string()
+            );
+
+            let res = async {
+                send!(conn, query(insertion.as_str()))?;
+                send!(conn, "commit")?;
+
+                send!(conn, "begin optimistic")?;
+                enable_failpoint(
+                    client,
+                    "github.com/pingcap/tidb/table/tables/corruptMutations",
+                    format!("1*return(\"{}\")", injection),
+                )
+                .await
+                .expect("failed to enable failpoint");
+                send!(conn, query(update.as_str()))?;
+                send!(conn, "commit")?;
+                Ok(())
+            }
+            .await;
+
+            if res.is_err() {
+                send!(conn, "rollback")?;
+            }
+            info!(log, "workload finished"; "result" => ?res);
             collect_result(res, results, &table, injection, pool.clone()).await;
             disable_failpoint(
                 client,
