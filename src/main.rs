@@ -5,23 +5,30 @@ use corrupttest::{
     table::*,
     workload::find_workload,
     Effectiveness, Result, AVAILABLE_INJECTIONS, CREATE_TABLE_DURAION_MS, FAILPOINT_DURATION_MS,
-    MYSQL_ADDRESS,
 };
 use futures::{pin_mut, StreamExt};
 use slog::{info, o, Drain, Logger};
 use sqlx::mysql::MySqlPoolOptions;
 use std::{
     collections::HashMap,
-    sync::{atomic::Ordering, Arc},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     time,
 };
 
+static EXIT: AtomicBool = AtomicBool::new(false);
+
 #[tokio::main]
 async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
-    let log = init_logger();
     let config = init_app();
+    let log = init_logger(&config);
     let workload = find_workload(&config.workload_name);
-    let (client, pool) = init_pool(&log).await?;
+    let (client, pool) = init_pool(&log, &config).await?;
+    ctrlc::set_handler(move || {
+        EXIT.store(true, Ordering::SeqCst);
+    })?;
     info!(log, "initialized"; "config" => ?config);
 
     let tables = Table::stream();
@@ -31,7 +38,10 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let mut cnt = 0;
     let start = time::Instant::now();
     while let Some(table) = tables.next().await {
-        if cnt >= config.limit.unwrap_or(u32::MAX) {
+        if EXIT.load(Ordering::SeqCst) {
+            break;
+        }
+        if config.limit > 0 && cnt >= config.limit {
             break;
         }
         cnt += 1;
@@ -56,25 +66,26 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn init_pool(log: &Logger) -> Result<(reqwest::Client, Arc<sqlx::Pool<sqlx::MySql>>)> {
+async fn init_pool(
+    log: &Logger,
+    config: &Config,
+) -> Result<(reqwest::Client, Arc<sqlx::Pool<sqlx::MySql>>)> {
     let client = reqwest::Client::new();
-    let url = format!("mysql://root@{}/test", MYSQL_ADDRESS);
-    info!(log, "using tidb {}", &url);
+    info!(log, "using tidb {}", config.uri);
     let pool = MySqlPoolOptions::new()
         .max_connections(32)
-        .connect(&url)
+        .connect(&config.uri)
         .await?;
     let pool = Arc::new(pool);
     Ok((client, pool))
 }
 
-fn init_logger() -> Logger {
-    let log_path = "log.log";
+fn init_logger(config: &Config) -> Logger {
     let file = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
         .truncate(true)
-        .open(log_path)
+        .open(&config.log_path)
         .unwrap();
     let decorator = slog_term::PlainSyncDecorator::new(file);
     let drain = slog_term::FullFormat::new(decorator)

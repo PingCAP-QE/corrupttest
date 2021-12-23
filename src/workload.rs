@@ -7,6 +7,7 @@ use crate::{
     Effectiveness, AVAILABLE_INJECTIONS,
 };
 use async_trait::async_trait;
+use lazy_static::lazy_static;
 use slog::{info, Logger};
 use sqlx::MySqlConnection;
 use sqlx::{query, Executor, MySql, Pool};
@@ -15,9 +16,27 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tokio::time::Instant;
 
+lazy_static! {
+    pub static ref WORKLOADS: HashMap<&'static str, Arc<dyn Workload + Sync + Send>> = {
+        let mut m: HashMap<&'static str, Arc<dyn Workload + Sync + Send>> = HashMap::new();
+        m.insert("single", Arc::new(SingleInsertion));
+        m.insert("double", Arc::new(DoubleInsertion));
+        m.insert("t2", Arc::new(T2));
+        m.insert("t3", Arc::new(T3));
+        m.insert("t4", Arc::new(T4));
+        m
+    };
+}
+
 macro_rules! send {
     ($conn:ident, $q: expr) => {
         $conn.execute($q).await
+    };
+    ($log:ident, $conn:ident, $q: expr) => {
+        {
+            info!($log, "executing"; "query" => $q.to_string());
+            $conn.execute($q).await
+        }
     };
 }
 
@@ -30,10 +49,7 @@ async fn collect_result(
     pool: Arc<Pool<MySql>>,
 ) {
     let e = match res {
-        Ok(_) => match send!(
-            pool,
-            query(format!("admin check table {}", table.name).as_str())
-        ) {
+        Ok(_) => match send!(pool, format!("admin check table {}", table.name).as_str()) {
             Ok(_) => Effectiveness::Consistent,
             Err(_) => Effectiveness::Failure,
         },
@@ -67,7 +83,7 @@ async fn enable_featuers(conn: &mut MySqlConnection, config: &Config) -> Result<
 
     send!(
         conn,
-        query(format!("set @@tidb_txn_assertion_level = {}", config.assertion).as_str())
+        format!("set @@tidb_txn_assertion_level = {}", config.assertion).as_str()
     )?;
     Ok(())
 }
@@ -85,15 +101,8 @@ pub trait Workload {
     ) -> Result<()>;
 }
 
-pub fn find_workload(name: &str) -> Box<dyn Workload> {
-    match name {
-        "single" => Box::new(SingleInsertion),
-        "double" => Box::new(DoubleInsertion),
-        "t2" => Box::new(T2),
-        "t3" => Box::new(T3),
-        "t4" => Box::new(T4),
-        _ => unimplemented!(),
-    }
+pub fn find_workload(name: &str) -> Arc<dyn Workload> {
+    WORKLOADS.get(name).unwrap().clone()
 }
 
 // a single insert
@@ -113,9 +122,8 @@ impl Workload for SingleInsertion {
         enable_featuers(&mut conn, config).await?;
         let drop_statement = table.drop_statement();
         let create_statement = table.create_statement();
-        info!(log, "{}", create_statement);
-        send!(conn, query(drop_statement.as_str()))?;
-        send!(conn, query(create_statement.as_str()))?;
+        send!(log, conn, drop_statement.as_str())?;
+        send!(log, conn, create_statement.as_str())?;
 
         for injection in AVAILABLE_INJECTIONS {
             enable_failpoint(
@@ -129,9 +137,8 @@ impl Workload for SingleInsertion {
                 table.name,
                 table.new_row().to_string()
             );
-            let res = send!(conn, query(insertion.as_str())).map(|_| ());
-            info!(log, "{}; {}", injection, insertion);
-            info!(log, "{:?}", res);
+            let res = send!(log, conn, insertion.as_str()).map(|_| ());
+            info!(log, "workload finished"; "result" => ?res);
 
             collect_result(res, results, &table, injection, pool.clone()).await;
             disable_failpoint(
@@ -162,9 +169,8 @@ impl Workload for DoubleInsertion {
         enable_featuers(&mut conn, config).await?;
         let drop_statement = table.drop_statement();
         let create_statement = table.create_statement();
-        send!(conn, drop_statement.as_str())?;
-        send!(conn, create_statement.as_str())?;
-        info!(log, "{}", create_statement);
+        send!(log, conn, drop_statement.as_str())?;
+        send!(log, conn, create_statement.as_str())?;
 
         for injection in AVAILABLE_INJECTIONS {
             info!(log, "{} ready to go!", injection);
@@ -176,7 +182,7 @@ impl Workload for DoubleInsertion {
                 format!("1*return(\"{}\")", injection),
             )
             .await?;
-            send!(conn, "BEGIN OPTIMISTIC")?;
+            send!(log, conn, "BEGIN OPTIMISTIC")?;
             let row = table.new_row();
             let insertion_1 = format!("INSERT INTO {} VALUES ({})", table.name, row.to_string());
             let insertion_2 = format!(
@@ -186,16 +192,16 @@ impl Workload for DoubleInsertion {
             );
 
             let res = async {
-                send!(conn, query(insertion_1.as_str()))?;
-                send!(conn, query(insertion_2.as_str()))?;
+                send!(log, conn, insertion_1.as_str())?;
+                send!(log, conn, insertion_2.as_str())?;
                 Ok(())
             }
             .await;
 
             if res.is_err() {
-                send!(conn, "ROLLBACK")?;
+                send!(log, conn, "ROLLBACK")?;
             }
-            info!(log, "{:?}", res);
+            info!(log, "workload finished"; "result" => ?res);
 
             collect_result(res, results, &table, injection, pool.clone()).await;
             disable_failpoint(
@@ -227,11 +233,10 @@ impl Workload for T2 {
         let drop_statement = table.drop_statement();
         let create_statement = table.create_statement();
         let start = Instant::now();
-        send!(conn, query(drop_statement.as_str())).expect("don't let drop statement fail");
-        send!(conn, query(create_statement.as_str())).expect("don't let create statement fail");
+        send!(log, conn, drop_statement.as_str()).expect("don't let drop statement fail");
+        send!(log, conn, create_statement.as_str()).expect("don't let create statement fail");
         let duration = start.elapsed();
         CREATE_TABLE_DURAION_MS.fetch_add(duration.as_millis() as u64, Ordering::SeqCst);
-        info!(log, "{}", create_statement);
 
         for injection in AVAILABLE_INJECTIONS {
             info!(log, "{} ready to go!", injection);
@@ -243,7 +248,7 @@ impl Workload for T2 {
                 format!("1*return(\"{}\")", injection),
             )
             .await?;
-            send!(conn, "begin optimistic")?;
+            send!(log, conn, "begin optimistic")?;
             let row = table.new_row();
             let insertion = format!("INSERT INTO {} VALUES ({})", table.name, row.to_string());
             let update = format!(
@@ -256,17 +261,17 @@ impl Workload for T2 {
             );
 
             let res = async {
-                send!(conn, query(insertion.as_str()))?;
-                send!(conn, "commit")?;
-                send!(conn, "begin optimistic")?;
-                send!(conn, query(update.as_str()))?;
-                send!(conn, "commit")?;
+                send!(log, conn, insertion.as_str())?;
+                send!(log, conn, "commit")?;
+                send!(log, conn, "begin optimistic")?;
+                send!(log, conn, update.as_str())?;
+                send!(log, conn, "commit")?;
                 Ok(())
             }
             .await;
 
             if res.is_err() {
-                send!(conn, "rollback")?;
+                send!(log, conn, "rollback")?;
             }
             info!(log, "workload finished"; "result" => ?res);
 
@@ -300,11 +305,10 @@ impl Workload for T3 {
         let drop_statement = table.drop_statement();
         let create_statement = table.create_statement();
         let start = Instant::now();
-        send!(conn, query(drop_statement.as_str())).expect("don't let drop statement fail");
-        send!(conn, query(create_statement.as_str())).expect("don't let create statement fail");
+        send!(log, conn, drop_statement.as_str()).expect("don't let drop statement fail");
+        send!(log, conn, create_statement.as_str()).expect("don't let create statement fail");
         let duration = start.elapsed();
         CREATE_TABLE_DURAION_MS.fetch_add(duration.as_millis() as u64, Ordering::SeqCst);
-        info!(log, "{}", create_statement);
 
         for injection in AVAILABLE_INJECTIONS {
             info!(log, "{} ready to go!", injection);
@@ -316,7 +320,7 @@ impl Workload for T3 {
                 format!("1*return(\"{}\")", injection),
             )
             .await?;
-            send!(conn, "begin optimistic")?;
+            send!(log, conn, "begin optimistic")?;
             let row = table.new_row();
             let insertion = format!("INSERT INTO {} VALUES ({})", table.name, row.to_string());
             let update = format!(
@@ -335,18 +339,18 @@ impl Workload for T3 {
             );
 
             let res = async {
-                send!(conn, query(insertion.as_str()))?;
-                send!(conn, "commit")?;
-                send!(conn, "begin optimistic")?;
-                send!(conn, query(update.as_str()))?;
-                send!(conn, query(deletion.as_str()))?;
-                send!(conn, "commit")?;
+                send!(log, conn, insertion.as_str())?;
+                send!(log, conn, "commit")?;
+                send!(log, conn, "begin optimistic")?;
+                send!(log, conn, update.as_str())?;
+                send!(log, conn, deletion.as_str())?;
+                send!(log, conn, "commit")?;
                 Ok(())
             }
             .await;
 
             if res.is_err() {
-                send!(conn, "rollback")?;
+                send!(log, conn, "rollback")?;
             }
             info!(log, "workload finished"; "result" => ?res);
 
@@ -380,17 +384,16 @@ impl Workload for T4 {
         let drop_statement = table.drop_statement();
         let create_statement = table.create_statement();
         let start = Instant::now();
-        send!(conn, query(drop_statement.as_str())).expect("don't let drop statement fail");
-        send!(conn, query(create_statement.as_str())).expect("don't let create statement fail");
+        send!(log, conn, drop_statement.as_str()).expect("don't let drop statement fail");
+        send!(log, conn, create_statement.as_str()).expect("don't let create statement fail");
         let duration = start.elapsed();
         CREATE_TABLE_DURAION_MS.fetch_add(duration.as_millis() as u64, Ordering::SeqCst);
-        info!(log, "{}", create_statement);
 
         for injection in AVAILABLE_INJECTIONS {
             info!(log, "{} ready to go!", injection);
 
             // NOTE: "1*" here, otherwise an index mutation is missing for each row insertion, thus cannot be detected.
-            send!(conn, "begin optimistic")?;
+            send!(log, conn, "begin optimistic")?;
             let row = table.new_row();
             let insertion = format!("INSERT INTO {} VALUES ({})", table.name, row.to_string());
             let update = format!(
@@ -403,10 +406,9 @@ impl Workload for T4 {
             );
 
             let res = async {
-                send!(conn, query(insertion.as_str()))?;
-                send!(conn, "commit")?;
-
-                send!(conn, "begin optimistic")?;
+                send!(log, conn, insertion.as_str())?;
+                send!(log, conn, "commit")?;
+                send!(log, conn, "begin optimistic")?;
                 enable_failpoint(
                     client,
                     "github.com/pingcap/tidb/table/tables/corruptMutations",
@@ -414,14 +416,14 @@ impl Workload for T4 {
                 )
                 .await
                 .expect("failed to enable failpoint");
-                send!(conn, query(update.as_str()))?;
-                send!(conn, "commit")?;
+                send!(log, conn, update.as_str())?;
+                send!(log, conn, "commit")?;
                 Ok(())
             }
             .await;
 
             if res.is_err() {
-                send!(conn, "rollback")?;
+                send!(log, conn, "rollback")?;
             }
             info!(log, "workload finished"; "result" => ?res);
             collect_result(res, results, &table, injection, pool.clone()).await;

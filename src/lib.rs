@@ -1,7 +1,6 @@
 #![feature(backtrace)]
 #![feature(try_blocks)]
 
-pub const MYSQL_ADDRESS: &str = "127.0.0.1:4000";
 pub const AVAILABLE_INJECTIONS: &[&str] = &[
     "extraIndex",
     "missingIndex",
