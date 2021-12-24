@@ -122,10 +122,10 @@ impl Workload for SingleInsertion {
         enable_featuers(&mut conn, config).await?;
         let drop_statement = table.drop_statement();
         let create_statement = table.create_statement();
-        send!(log, conn, drop_statement.as_str())?;
-        send!(log, conn, create_statement.as_str())?;
 
         for injection in AVAILABLE_INJECTIONS {
+            send!(log, conn, drop_statement.as_str()).expect("don't let drop statement fail");
+            send!(log, conn, create_statement.as_str()).expect("don't let create statement fail");
             enable_failpoint(
                 client,
                 "github.com/pingcap/tidb/table/tables/corruptMutations",
@@ -169,10 +169,10 @@ impl Workload for DoubleInsertion {
         enable_featuers(&mut conn, config).await?;
         let drop_statement = table.drop_statement();
         let create_statement = table.create_statement();
-        send!(log, conn, drop_statement.as_str())?;
-        send!(log, conn, create_statement.as_str())?;
 
         for injection in AVAILABLE_INJECTIONS {
+            send!(log, conn, drop_statement.as_str()).expect("don't let drop statement fail");
+            send!(log, conn, create_statement.as_str()).expect("don't let create statement fail");
             info!(log, "{} ready to go!", injection);
 
             // NOTE: "1*" here, otherwise an index mutation is missing for each row insertion, thus cannot be detected.
@@ -233,12 +233,12 @@ impl Workload for T2 {
         let drop_statement = table.drop_statement();
         let create_statement = table.create_statement();
         let start = Instant::now();
-        send!(log, conn, drop_statement.as_str()).expect("don't let drop statement fail");
-        send!(log, conn, create_statement.as_str()).expect("don't let create statement fail");
         let duration = start.elapsed();
         CREATE_TABLE_DURAION_MS.fetch_add(duration.as_millis() as u64, Ordering::SeqCst);
 
         for injection in AVAILABLE_INJECTIONS {
+            send!(log, conn, drop_statement.as_str()).expect("don't let drop statement fail");
+            send!(log, conn, create_statement.as_str()).expect("don't let create statement fail");
             info!(log, "{} ready to go!", injection);
 
             // NOTE: "1*" here, otherwise an index mutation is missing for each row insertion, thus cannot be detected.
@@ -305,12 +305,12 @@ impl Workload for T3 {
         let drop_statement = table.drop_statement();
         let create_statement = table.create_statement();
         let start = Instant::now();
-        send!(log, conn, drop_statement.as_str()).expect("don't let drop statement fail");
-        send!(log, conn, create_statement.as_str()).expect("don't let create statement fail");
         let duration = start.elapsed();
         CREATE_TABLE_DURAION_MS.fetch_add(duration.as_millis() as u64, Ordering::SeqCst);
 
         for injection in AVAILABLE_INJECTIONS {
+            send!(log, conn, drop_statement.as_str()).expect("don't let drop statement fail");
+            send!(log, conn, create_statement.as_str()).expect("don't let create statement fail");
             info!(log, "{} ready to go!", injection);
 
             // NOTE: "1*" here, otherwise an index mutation is missing for each row insertion, thus cannot be detected.
@@ -384,12 +384,12 @@ impl Workload for T4 {
         let drop_statement = table.drop_statement();
         let create_statement = table.create_statement();
         let start = Instant::now();
-        send!(log, conn, drop_statement.as_str()).expect("don't let drop statement fail");
-        send!(log, conn, create_statement.as_str()).expect("don't let create statement fail");
         let duration = start.elapsed();
         CREATE_TABLE_DURAION_MS.fetch_add(duration.as_millis() as u64, Ordering::SeqCst);
 
         for injection in AVAILABLE_INJECTIONS {
+            send!(log, conn, drop_statement.as_str()).expect("don't let drop statement fail");
+            send!(log, conn, create_statement.as_str()).expect("don't let create statement fail");
             info!(log, "{} ready to go!", injection);
 
             // NOTE: "1*" here, otherwise an index mutation is missing for each row insertion, thus cannot be detected.

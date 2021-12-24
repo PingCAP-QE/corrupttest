@@ -9,7 +9,6 @@ pub struct Config {
     pub assertion: String,
     pub limit: u32,
     pub uri: String,
-    pub db_name: String,
     pub log_path: String,
 }
 
@@ -58,14 +57,6 @@ pub fn init_app() -> Config {
                 .default_value("mysql://root@127.0.0.1:4000/test"),
         )
         .arg(
-            Arg::with_name("db_name")
-                .short("d")
-                .long("db_name")
-                .takes_value(true)
-                .required(false)
-                .default_value("test"),
-        )
-        .arg(
             Arg::with_name("log_path")
                 .short("o")
                 .long("log_path")
@@ -87,7 +78,6 @@ pub fn init_app() -> Config {
             .parse::<u32>()
             .expect("limit must be a non-negative number"),
         uri: matches.value_of("uri").unwrap().to_owned(),
-        db_name: matches.value_of("db_name").unwrap().to_owned(),
         log_path: matches.value_of("log_path").unwrap().to_owned(),
     };
     config

@@ -1,6 +1,7 @@
 #![feature(backtrace)]
-#![feature(try_blocks)]
 
+// assume that injections won't corrupt table_ids. Otherwise drop table may not be able to clear corrupted data,
+// and will affect following tests.
 pub const AVAILABLE_INJECTIONS: &[&str] = &[
     "extraIndex",
     "missingIndex",
