@@ -37,8 +37,15 @@ Examples:
 
 `cargo +nightly run -- -a fast -m 1 -w single -o logs/single.log -l 100` only runs the first 100 tables.
 
+The result is written to both stderr and the log.
+
+### How to test all
+
 There is a [script](./enumerate.sh) to run all combinations of the flags, modify them when needed.
 
+There is also a binary tool to parse the logs (maybe we should take the benefit of slog to avoid parsing 🥲), and turn them into a csv.
+
+`cargo run --bin log2csv -- -p logs`
 ## For developers
 
 People who want to add/maintain the tests most likely need to modify the following files:

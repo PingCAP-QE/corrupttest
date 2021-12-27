@@ -17,4 +17,6 @@ pub enum MyError {
         reqwest: reqwest::Error,
         backtraec: Backtrace,
     },
+    #[error("{0}")]
+    Io(#[from] std::io::Error),
 }
