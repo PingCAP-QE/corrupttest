@@ -57,6 +57,9 @@ async fn collect_result(
             if x.to_string().to_lowercase().contains("inconsist")
                 || x.to_string().to_lowercase().contains("assertion") =>
         {
+            // note: if we run `admin check table` here and get no error, it doesn't mean it's a misreport.
+            // It's possible that the txn containing corrupted data is aborted because inconsistency is detected.
+            // Then admin check table will not report inconsistency because corrupted data is not written to TiKV.
             Effectiveness::Success
         }
         Err(_) => Effectiveness::OtherError,
