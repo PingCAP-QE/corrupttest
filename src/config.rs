@@ -15,50 +15,50 @@ pub struct Config {
 pub fn init_app() -> Config {
     let matches = App::new("corrupttest")
         .arg(
-            Arg::with_name("workload")
-                .short("w")
+            Arg::new("workload")
+                .short('w')
                 .long("workload")
                 .takes_value(true)
                 .required(true)
                 .possible_values(&WORKLOADS.keys().cloned().collect::<Vec<_>>()),
         )
         .arg(
-            Arg::with_name("mutation_checker")
-                .short("m")
+            Arg::new("mutation_checker")
+                .short('m')
                 .long("mutation_checker")
                 .takes_value(true)
                 .required(true)
-                .case_insensitive(true)
+                .ignore_case(true)
                 .possible_values(&["0", "1", "true", "false", "on", "off"]),
         )
         .arg(
-            Arg::with_name("assertion")
-                .short("a")
+            Arg::new("assertion")
+                .short('a')
                 .long("assertion")
                 .takes_value(true)
                 .required(true)
-                .case_insensitive(true)
+                .ignore_case(true)
                 .possible_values(&["off", "fast", "strict"]),
         )
         .arg(
-            Arg::with_name("limit")
-                .short("l")
+            Arg::new("limit")
+                .short('l')
                 .long("limit")
                 .takes_value(true)
                 .required(false)
                 .default_value("0"),
         )
         .arg(
-            Arg::with_name("uri")
-                .short("u")
+            Arg::new("uri")
+                .short('u')
                 .long("uri")
                 .takes_value(true)
                 .required(false)
                 .default_value("mysql://root@127.0.0.1:4000/test"),
         )
         .arg(
-            Arg::with_name("log_path")
-                .short("o")
+            Arg::new("log_path")
+                .short('o')
                 .long("log_path")
                 .takes_value(true)
                 .required(false)

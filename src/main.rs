@@ -87,12 +87,23 @@ fn init_logger(config: &Config) -> Logger {
         .truncate(true)
         .open(&config.log_path)
         .unwrap();
-    let decorator = slog_term::PlainSyncDecorator::new(file);
-    let drain = slog_term::FullFormat::new(decorator)
+    let file_decorator = slog_term::PlainSyncDecorator::new(file);
+    // also print error logs to stderr
+    let stderr_decorator = slog_term::TermDecorator::new().build();
+    let file_drain = slog_term::FullFormat::new(file_decorator)
         .use_file_location()
-        .build()
-        .fuse();
-    let drain = slog_async::Async::new(drain).build().fuse();
+        .build();
+    let stderr_drain = slog_async::Async::new(
+        slog::LevelFilter::new(
+            slog_term::FullFormat::new(stderr_decorator)
+                .use_file_location()
+                .build(),
+            slog::Level::Warning,
+        )
+        .fuse(),
+    )
+    .build();
+    let drain = slog::Duplicate::new(file_drain, stderr_drain).fuse();
     slog::Logger::root(drain, o!())
 }
 

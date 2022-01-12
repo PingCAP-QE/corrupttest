@@ -6,15 +6,15 @@ use std::{fs::File, io::Read, path::Path};
 fn main() -> Result<()> {
     let matches = App::new("corrupttest")
         .arg(
-            Arg::with_name("log_dir_path")
-                .short("p")
+            Arg::new("log_dir_path")
+                .short('p')
                 .long("log_dir_path")
                 .takes_value(true)
                 .default_value("./logs"),
         )
         .get_matches();
     let dir_path = matches.value_of("log_dir_path").unwrap();
-    
+
     println!("workload, mutation checker, assertion, injection, success, other error, failure, consistent");
     let dir = std::fs::read_dir(dir_path)?;
     for entry in dir {

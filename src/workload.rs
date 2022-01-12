@@ -130,6 +130,7 @@ impl Workload for SingleInsertion {
             send!(log, conn, drop_statement.as_str()).expect("don't let drop statement fail");
             send!(log, conn, create_statement.as_str()).expect("don't let create statement fail");
             enable_failpoint(
+                &log,
                 client,
                 "github.com/pingcap/tidb/table/tables/corruptMutations",
                 format!("return(\"{}\")", injection),
@@ -145,6 +146,7 @@ impl Workload for SingleInsertion {
 
             collect_result(res, results, &table, injection, pool.clone()).await;
             disable_failpoint(
+                &log,
                 client,
                 "github.com/pingcap/tidb/table/tables/corruptMutations",
             )
@@ -180,6 +182,7 @@ impl Workload for DoubleInsertion {
 
             // NOTE: "1*" here, otherwise an index mutation is missing for each row insertion, thus cannot be detected.
             enable_failpoint(
+                &log,
                 client,
                 "github.com/pingcap/tidb/table/tables/corruptMutations",
                 format!("1*return(\"{}\")", injection),
@@ -208,6 +211,7 @@ impl Workload for DoubleInsertion {
 
             collect_result(res, results, &table, injection, pool.clone()).await;
             disable_failpoint(
+                &log,
                 client,
                 "github.com/pingcap/tidb/table/tables/corruptMutations",
             )
@@ -246,6 +250,7 @@ impl Workload for T2 {
 
             // NOTE: "1*" here, otherwise an index mutation is missing for each row insertion, thus cannot be detected.
             enable_failpoint(
+                &log,
                 client,
                 "github.com/pingcap/tidb/table/tables/corruptMutations",
                 format!("1*return(\"{}\")", injection),
@@ -280,6 +285,7 @@ impl Workload for T2 {
 
             collect_result(res, results, &table, injection, pool.clone()).await;
             disable_failpoint(
+                &log,
                 client,
                 "github.com/pingcap/tidb/table/tables/corruptMutations",
             )
@@ -318,6 +324,7 @@ impl Workload for T3 {
 
             // NOTE: "1*" here, otherwise an index mutation is missing for each row insertion, thus cannot be detected.
             enable_failpoint(
+                &log,
                 client,
                 "github.com/pingcap/tidb/table/tables/corruptMutations",
                 format!("1*return(\"{}\")", injection),
@@ -359,6 +366,7 @@ impl Workload for T3 {
 
             collect_result(res, results, &table, injection, pool.clone()).await;
             disable_failpoint(
+                &log,
                 client,
                 "github.com/pingcap/tidb/table/tables/corruptMutations",
             )
@@ -413,6 +421,7 @@ impl Workload for T4 {
                 send!(log, conn, "commit")?;
                 send!(log, conn, "begin optimistic")?;
                 enable_failpoint(
+                    &log,
                     client,
                     "github.com/pingcap/tidb/table/tables/corruptMutations",
                     format!("1*return(\"{}\")", injection),
@@ -431,6 +440,7 @@ impl Workload for T4 {
             info!(log, "workload finished"; "result" => ?res);
             collect_result(res, results, &table, injection, pool.clone()).await;
             disable_failpoint(
+                &log,
                 client,
                 "github.com/pingcap/tidb/table/tables/corruptMutations",
             )
