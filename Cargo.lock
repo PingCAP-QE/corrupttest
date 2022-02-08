@@ -23,12 +23,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "arc-swap"
-version = "1.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5d78ce20460b82d3fa150275ed9d55e21064fc7951177baacf86a145c4a4b1f"
-
-[[package]]
 name = "arrayref"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -235,6 +229,7 @@ dependencies = [
  "async-stream",
  "async-trait",
  "clap",
+ "csv",
  "ctrlc",
  "futures",
  "futures-core",
@@ -243,9 +238,9 @@ dependencies = [
  "prettytable-rs",
  "regex",
  "reqwest",
+ "serde",
  "slog",
  "slog-async",
- "slog-scope",
  "slog-term",
  "sqlx",
  "thiserror",
@@ -1387,6 +1382,20 @@ name = "serde"
 version = "1.0.130"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f12d06de37cf59146fbdecab66aa99f9fe4f78722e3607577a5375d66bd0c913"
+dependencies = [
+ "serde_derive",
+]
+
+[[package]]
+name = "serde_derive"
+version = "1.0.130"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7bc1a1ab1961464eae040d96713baa5a724a8152c1222492465b54322ec508b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "serde_json"
@@ -1480,17 +1489,6 @@ dependencies = [
  "slog",
  "take_mut",
  "thread_local",
-]
-
-[[package]]
-name = "slog-scope"
-version = "4.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f95a4b4c3274cd2869549da82b57ccc930859bdbf5bcea0424bc5f140b3c786"
-dependencies = [
- "arc-swap",
- "lazy_static",
- "slog",
 ]
 
 [[package]]
