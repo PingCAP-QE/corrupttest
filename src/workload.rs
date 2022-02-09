@@ -256,7 +256,6 @@ impl Workload for T2 {
                 format!("1*return(\"{}\")", injection),
             )
             .await?;
-            send!(log, conn, "begin optimistic")?;
             let row = table.new_row();
             let insertion = format!("INSERT INTO {} VALUES ({})", table.name, row.to_string());
             let update = format!(
@@ -269,6 +268,7 @@ impl Workload for T2 {
             );
 
             let res = async {
+                send!(log, conn, "begin optimistic")?;
                 send!(log, conn, insertion.as_str())?;
                 send!(log, conn, "commit")?;
                 send!(log, conn, "begin optimistic")?;
@@ -345,7 +345,7 @@ impl Workload for T3 {
                 "DELETE FROM {} WHERE {} = {}",
                 table.name,
                 table.cols[0].name,
-                row.cols[0].to_string()
+                row.cols[1].to_string()
             );
 
             let res = async {
@@ -403,7 +403,6 @@ impl Workload for T4 {
             send!(log, conn, create_statement.as_str()).expect("don't let create statement fail");
             info!(log, "{} ready to go!", injection);
 
-            // NOTE: "1*" here, otherwise an index mutation is missing for each row insertion, thus cannot be detected.
             send!(log, conn, "begin optimistic")?;
             let row = table.new_row();
             let insertion = format!("INSERT INTO {} VALUES ({})", table.name, row.to_string());
@@ -420,6 +419,7 @@ impl Workload for T4 {
                 send!(log, conn, insertion.as_str())?;
                 send!(log, conn, "commit")?;
                 send!(log, conn, "begin optimistic")?;
+                // NOTE: "1*" here, otherwise an index mutation is missing for each row insertion, thus cannot be detected.
                 enable_failpoint(
                     &log,
                     client,
