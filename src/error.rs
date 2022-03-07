@@ -1,12 +1,22 @@
-use std::fmt::Display;
+use std::backtrace::Backtrace;
+use thiserror::Error;
 
-#[derive(Debug, Clone)]
-pub struct StringError(pub String);
-
-impl Display for StringError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
+#[derive(Error, Debug)]
+pub enum MyError {
+    #[error("{0}")]
+    StringError(String),
+    #[error("sqlx error: {sqlx:?}")]
+    SqlxError {
+        #[from]
+        sqlx: sqlx::Error,
+        backtrace: Backtrace,
+    },
+    #[error("reqwest error: {reqwest:?}")]
+    ReqwestError {
+        #[from]
+        reqwest: reqwest::Error,
+        backtrace: Backtrace,
+    },
+    #[error("{0}")]
+    Io(#[from] std::io::Error),
 }
-
-impl std::error::Error for StringError {}

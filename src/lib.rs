@@ -1,6 +1,7 @@
-#![feature(type_alias_impl_trait)]
+#![feature(backtrace)]
 
-pub const MYSQL_ADDRESS: &str = "127.0.0.1:4000";
+// assume that injections won't corrupt table_ids. Otherwise drop table may not be able to clear corrupted data,
+// and will affect following tests.
 pub const AVAILABLE_INJECTIONS: &[&str] = &[
     "extraIndex",
     "missingIndex",
@@ -11,12 +12,17 @@ pub const AVAILABLE_INJECTIONS: &[&str] = &[
 pub mod config;
 pub mod error;
 pub mod failpoint;
+pub mod metrics;
 pub mod table;
 pub mod workload;
 
+pub use metrics::*;
+
 pub enum Effectiveness {
-    Inconsistent, // the error message contains "inconsist"-like words
-    OtherError,   // other errors are reported
-    NoError,      // failed to detect error
-    Consistent,   // the injections don't affect - e.g. `admin check table` returns no error
+    Success,    // the error message contains "inconsist"-like words
+    OtherError, // other errors are reported
+    Failure,    // failed to detect error
+    Consistent, // the injections don't affect - e.g. `admin check table` returns no error
 }
+
+pub type Result<T> = std::result::Result<T, error::MyError>;
