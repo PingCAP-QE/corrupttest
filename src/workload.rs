@@ -132,6 +132,7 @@ impl Workload for SingleInsertion {
             enable_failpoint(
                 &log,
                 client,
+                config.status_addr.clone(),
                 "github.com/pingcap/tidb/table/tables/corruptMutations",
                 format!("return(\"{}\")", injection),
             )
@@ -148,6 +149,7 @@ impl Workload for SingleInsertion {
             disable_failpoint(
                 &log,
                 client,
+                config.status_addr.clone(),
                 "github.com/pingcap/tidb/table/tables/corruptMutations",
             )
             .await?;
@@ -184,6 +186,7 @@ impl Workload for DoubleInsertion {
             enable_failpoint(
                 &log,
                 client,
+                config.status_addr.clone(),
                 "github.com/pingcap/tidb/table/tables/corruptMutations",
                 format!("1*return(\"{}\")", injection),
             )
@@ -213,6 +216,7 @@ impl Workload for DoubleInsertion {
             disable_failpoint(
                 &log,
                 client,
+                config.status_addr.clone(),
                 "github.com/pingcap/tidb/table/tables/corruptMutations",
             )
             .await?;
@@ -252,6 +256,7 @@ impl Workload for T2 {
             enable_failpoint(
                 &log,
                 client,
+                config.status_addr.clone(),
                 "github.com/pingcap/tidb/table/tables/corruptMutations",
                 format!("1*return(\"{}\")", injection),
             )
@@ -287,6 +292,7 @@ impl Workload for T2 {
             disable_failpoint(
                 &log,
                 client,
+                config.status_addr.clone(),
                 "github.com/pingcap/tidb/table/tables/corruptMutations",
             )
             .await?;
@@ -326,6 +332,7 @@ impl Workload for T3 {
             enable_failpoint(
                 &log,
                 client,
+                config.status_addr.clone(),
                 "github.com/pingcap/tidb/table/tables/corruptMutations",
                 format!("1*return(\"{}\")", injection),
             )
@@ -368,6 +375,7 @@ impl Workload for T3 {
             disable_failpoint(
                 &log,
                 client,
+                config.status_addr.clone(),
                 "github.com/pingcap/tidb/table/tables/corruptMutations",
             )
             .await?;
@@ -423,6 +431,7 @@ impl Workload for T4 {
                 enable_failpoint(
                     &log,
                     client,
+                    config.status_addr.clone(),
                     "github.com/pingcap/tidb/table/tables/corruptMutations",
                     format!("1*return(\"{}\")", injection),
                 )
@@ -442,6 +451,7 @@ impl Workload for T4 {
             disable_failpoint(
                 &log,
                 client,
+                config.status_addr.clone(),
                 "github.com/pingcap/tidb/table/tables/corruptMutations",
             )
             .await?;
