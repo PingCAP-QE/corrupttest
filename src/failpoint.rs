@@ -6,18 +6,20 @@ use slog::Logger;
 use std::sync::atomic::Ordering;
 use tokio::time;
 
-const STATUS_ADDRESS: &str = "127.0.0.1:10080";
-
 pub async fn enable_failpoint(
     log: &Logger,
     client: &reqwest::Client,
+    status_addr: impl Into<String>,
     name: impl Into<String>,
     value: impl Into<String>,
 ) -> Result<()> {
     let start = time::Instant::now();
-    let name = name.into();
     let res = client
-        .put(format!("http://{}/fail/{}", STATUS_ADDRESS, &name))
+        .put(format!(
+            "http://{}/fail/{}",
+            status_addr.into(),
+            name.into()
+        ))
         .body(value.into())
         .send()
         .await?;
@@ -35,11 +37,16 @@ pub async fn enable_failpoint(
 pub async fn disable_failpoint(
     log: &Logger,
     client: &reqwest::Client,
+    status_addr: impl Into<String>,
     name: impl Into<String>,
 ) -> Result<()> {
     let start = time::Instant::now();
     let res = client
-        .delete(format!("http://{}/fail/{}", STATUS_ADDRESS, name.into()))
+        .delete(format!(
+            "http://{}/fail/{}",
+            status_addr.into(),
+            name.into()
+        ))
         .send()
         .await?;
     let duration = start.elapsed();

@@ -9,6 +9,7 @@ pub struct Config {
     pub assertion: String,
     pub limit: u32,
     pub uri: String,
+    pub status_addr: String,
     pub log_path: String,
 }
 
@@ -64,6 +65,14 @@ pub fn init_app() -> Config {
                 .required(false)
                 .default_value("corrupttest.log"),
         )
+        .arg(
+            Arg::new("status_addr")
+                .short('s')
+                .long("status_addr")
+                .takes_value(true)
+                .required(false)
+                .default_value("127.0.0.1:10080"),
+        )
         .get_matches();
     let config = Config {
         workload_name: matches
@@ -78,6 +87,7 @@ pub fn init_app() -> Config {
             .parse::<u32>()
             .expect("limit must be a non-negative number"),
         uri: matches.value_of("uri").unwrap().to_owned(),
+        status_addr: matches.value_of("status_addr").unwrap().to_owned(),
         log_path: matches.value_of("log_path").unwrap().to_owned(),
     };
     config
