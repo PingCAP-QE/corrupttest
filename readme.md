@@ -41,7 +41,9 @@ The result is written to both stderr and the log.
 
 ### How to test all
 
-There is a [script](./enumerate.sh) to run all combinations of the flags, modify them when needed.
+There is a [script](./enumerate.sh) to run all combinations of the flags, modify them when needed. 
+
+It takes two arguments: the uri of TiDB and the status address of TiDB.
 
 There is also a binary tool to parse the logs (maybe we should take the benefit of slog to avoid parsing 🥲), and turn them into a csv.
 
