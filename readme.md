@@ -4,7 +4,8 @@ A tool to test the ft-data-inconsistency feature. It enumerates combinations of 
 
 ## Requirements
 
-nightly rust
+- nightly rust
+- `mc` in PATH
 
 ## Usage
 

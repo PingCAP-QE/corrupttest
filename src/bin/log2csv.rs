@@ -2,10 +2,20 @@ use clap::{App, Arg};
 use corrupttest::{error::MyError, Result};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::{fs::File, io::Read, path::Path};
+use std::{fs::File, io::Read, path::Path, process::Command};
 
-const RESULT_URL: &str = "/pingcap/qa/tests/corrupttest/res.csv";
 const RESULT_FILENAME: &str = "res.csv";
+
+const MINIO_RESULT_PATH: &'static str = "idc/tp-team/tests/corrupttest/res.csv";
+const MINIO_URL: &'static str = env!("MINIO_URL", "environment vairable MINIO_URL not set");
+const MINIO_ACCESS_KEY: &'static str = env!(
+    "MINIO_ACCESS_KEY",
+    "environment vairable MINIO_ACCESS_KEY not set"
+);
+const MINIO_SECRET_KEY: &'static str = env!(
+    "MINIO_SECRET_KEY",
+    "environment vairable MINIO_SECRET_KEY not set"
+);
 
 // sort by mutation checker, assertion, injection, workload
 fn main() -> Result<()> {
@@ -56,20 +66,30 @@ fn process_results(mut records: Vec<Record>, local: bool) -> Result<()> {
         write_result(&records)?;
     } else {
         // get previous results from remote
-        let output = std::process::Command::new("dodo")
-            .env_remove("all_proxy")
-            .env_remove("http_proxy")
-            .env_remove("https_proxy")
-            .arg("get")
-            .arg(RESULT_URL)
-            .output()
-            .expect("failed to get previous result");
-        if !output.status.success() {
-            println!("{:?}", output);
-            return Err(MyError::StringError(
-                "failed to get previous result".to_string(),
-            ));
+        let output = Command::new("mc")
+            .args([
+                "config",
+                "host",
+                "add",
+                "idc",
+                MINIO_URL,
+                MINIO_ACCESS_KEY,
+                MINIO_SECRET_KEY,
+            ])
+            .status()
+            .expect("mc config failed");
+        if !output.success() {
+            return Err(MyError::StringError("mc config failed".to_owned()));
         }
+
+        let output = Command::new("mc")
+            .args(["cp", MINIO_RESULT_PATH, RESULT_FILENAME])
+            .status()
+            .expect("mc download failed");
+        if !output.success() {
+            return Err(MyError::StringError("mc download failed".to_owned()));
+        }
+
         let mut old_record = {
             let file = std::fs::File::open(RESULT_FILENAME)?;
             let mut rdr = csv::Reader::from_reader(file);
@@ -112,19 +132,14 @@ fn process_results(mut records: Vec<Record>, local: bool) -> Result<()> {
         write_result(&records)?;
 
         // upload to remote for future comparison
-        let output = std::process::Command::new("dodo")
-            .env_remove("all_proxy")
-            .env_remove("http_proxy")
-            .env_remove("https_proxy")
-            .arg("put")
-            .arg(RESULT_URL)
-            .arg(RESULT_FILENAME)
-            .output()
-            .expect("failed to put new result");
-        if !output.status.success() {
-            println!("{:?}", output);
-            return Err(MyError::StringError("failed to put new result".to_string()));
+        let output = Command::new("mc")
+            .args(["cp", RESULT_FILENAME, MINIO_RESULT_PATH])
+            .status()
+            .expect("mc upload failed");
+        if !output.success() {
+            return Err(MyError::StringError("mc upload failed".to_owned()));
         }
+
         if !diffs.is_empty() {
             return Err(MyError::StringError(
                 "effective rates have changed".to_string(),
