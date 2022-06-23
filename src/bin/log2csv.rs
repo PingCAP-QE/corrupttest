@@ -99,33 +99,36 @@ fn process_results(mut records: Vec<Record>, local: bool) -> Result<()> {
         };
 
         // Compare it with current one
-        if old_record.len() != records.len() {
-            println!("{:?}", old_record);
-            println!("{:?}", records);
-            return Err(MyError::StringError(
-                "results have different lengths".to_string(),
-            ));
+        let overwrite = old_record.len() != records.len();
+        if overwrite {
+            eprintln!("{:?}", old_record);
+            eprintln!("{:?}", records);
+            eprintln!("results have different lengths, overwriting remote results");
         }
-        old_record.sort_by_cached_key(record_sort_key);
-        let diffs: Vec<_> = old_record
-            .iter()
-            .zip(records.iter())
-            .filter(|(old, new)| {
-                old.effective_rate != new.effective_rate
-                    && !(old.effective_rate.is_nan() && new.effective_rate.is_nan())
-            })
-            .collect();
-        if !diffs.is_empty() {
-            for (old, new) in &diffs {
-                println!(
-                    "mutation_checker:{}, assertion:{}, injection:{}, workload:{}, {} -> {}",
-                    old.mutation_checker,
-                    old.assertion,
-                    old.injection,
-                    old.workload,
-                    old.effective_rate,
-                    new.effective_rate
-                );
+
+        let mut diffs = vec![];
+        if !overwrite {
+            old_record.sort_by_cached_key(record_sort_key);
+            diffs = old_record
+                .iter()
+                .zip(records.iter())
+                .filter(|(old, new)| {
+                    old.effective_rate != new.effective_rate
+                        && !(old.effective_rate.is_nan() && new.effective_rate.is_nan())
+                })
+                .collect();
+            if !diffs.is_empty() {
+                for (old, new) in &diffs {
+                    println!(
+                        "mutation_checker:{}, assertion:{}, injection:{}, workload:{}, {} -> {}",
+                        old.mutation_checker,
+                        old.assertion,
+                        old.injection,
+                        old.workload,
+                        old.effective_rate,
+                        new.effective_rate
+                    );
+                }
             }
         }
 
