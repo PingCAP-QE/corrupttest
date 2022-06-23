@@ -8,10 +8,9 @@ do
     do
         for w in t2 t3 t4
         do
-            ./corrupttest -w $w -m $m -a $a -o logs/$w-$m-$a.log -u $1 -s $2
+            cargo +nightly run -- -w $w -m $m -a $a -o logs/$w-$m-$a.log
         done
     done
 done
 
-./log2csv
-exit $?
+cargo +nightly run --bin log2csv -- -l
